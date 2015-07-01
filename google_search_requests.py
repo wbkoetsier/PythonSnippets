@@ -35,7 +35,7 @@ if len(sys.argv) >= 2:
 else:
     searchterm = raw_input('Type your search string: ')
 
-print 'You enetered the following search term:', searchterm
+print 'You entered the following search term:', searchterm
 
 # this is the most basic Google search url:
 url = 'https://www.google.nl/search'
