@@ -4,7 +4,7 @@ Python exercises to improve my skills
 ## Google search using requests module
 I was asked to "use Python and the requests module to enter a search term in Google and recieve the results" for a job application. Thanks to mr. Lutterop for asking this question.
 
-I have interpreted this question in the simplest way possible. The script, which runs command line (see below), asks the user for a search term, uses the requests module to send a get request with that term to Google and print the results as plain text.
+I have interpreted this question in the simplest way possible. The script ([google_search_requests.py](google_search_requests.py)), which runs command line (see below), asks the user for a search term, uses the requests module to send a get request with that term to Google and print the results as plain text.
 
 ### Usage
 Make the script executable (chmod 755 google_search_requests.py) and run:
