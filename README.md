@@ -2,16 +2,23 @@
 Python exercises to improve my skills
 
 ## Google search using requests module
-I was asked to "use Pythion and the requests module to enter a search term in Google and recieve the results" for a job application. Thanks to mr. Lutterop for asking this question.
+I was asked to "use Python and the requests module to enter a search term in Google and recieve the results" for a job application. Thanks to mr. Lutterop for asking this question.
 
 I have interpreted this question in the simplest way possible. The script, which runs command line (see below), asks the user for a search term, uses the requests module to send a get request with that term to Google and print the results as plain text.
 
 ### Usage
 Make the script executable (chmod 755 google_search_requests.py) and run:
+
+```
 ./google_search_requests.py
+```
 
 Here's an alternative:
+
+```
 ./google_search_requests.py your search terms > response.txt
+```
+
 Use this if you'd like to pipe, because obviously user input doesn't work in that case.
 
 ### Issues
@@ -20,7 +27,8 @@ When writing this script, I ran into 2 rather inconvenient issues.
 #### 1. Temporary failure in name resolution
 The get request threw me an error:
 
-```>>> import requests
+```
+>>> import requests
 >>> payload = {'q': 'french taunting'}
 >>> r = requests.get("http://www.google.nl/search", params=payload)
 Traceback (most recent call last):
@@ -43,7 +51,8 @@ I was unable to reproduce. I'm pretty sure a DNS lookup fail was caused by a bri
 #### 2. The known Python encoding hell
 Pyhton outputs using ascii. This can be a problem with certain terminal emulators, apparently including mine. Here's what happens: when you print something to stdout, everything is fine untill you try to pipe that output. This is because Python auto-detects the correct output encoding but not when piping. What worked for me was explicitly telling Python to use utf-8 by adding to my bashrc:
 
-```export PYTHONIOENCODING=utf-8
+```
+export PYTHONIOENCODING=utf-8
 ```
 
 ### Things to consider
