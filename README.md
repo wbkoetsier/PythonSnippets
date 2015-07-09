@@ -1,6 +1,58 @@
 # PythonExercises
 Python exercises to improve my skills
 
+## Google search using Selenium
+'Use Selenium to enter a search term in Google and recieve the results' - see 'Google search using requests module' below.
+
+### Usage
+Make the script executable (755 will do) and run:
+
+```
+./google_search_selenium.py > google_search_selenium.out
+```
+
+Chrome is started and you can see the keystrokes being sent.
+
+### Selenium
+Installed Selenium 2.46.0 using pip:
+
+```
+$ pip install selenium
+Downloading/unpacking selenium
+  Downloading selenium-2.46.0.tar.gz (2.6MB): 2.6MB downloaded
+  Running setup.py (path:/tmp/pip-build-73a0k3/selenium/setup.py) egg_info for package selenium
+    
+Installing collected packages: selenium
+  Running setup.py install for selenium
+    
+Successfully installed selenium
+Cleaning up...
+```
+
+This seems to be the most up-to-date command reference for Selenium: http://release.seleniumhq.org/selenium-core/1.0.1/reference.html
+I am following http://selenium.googlecode.com/git/docs/api/py/index.html
+
+### chromedriver
+Separate drivers are needed to run Selenium scripts in Chrome or IE. Selenium has native support for Firefox, so no separate driver is needed. Also check: http://stackoverflow.com/questions/21878900/why-do-we-need-iedriver-and-chromedriver-but-no-firefox-driver
+
+I installed chromedriver using https://sites.google.com/a/chromium.org/chromedriver/getting-started. I already had Google Chrome installed (not Chromium!). I chose not to use the Ubuntu packaged chromedriver (apt-cache showpkg chromium-chromedriver) because I'm not sure that's the latest. I downloaded http://chromedriver.storage.googleapis.com/2.16/chromedriver_linux64.zip and unzipped in my home bin dir. This dir is on my PATH (important!).
+
+Running
+
+```
+browser = webdriver.Chrome()
+```
+
+successfully opens Chrome with the page 'data:,' opened (a blank page).
+
+### Issues
+I included a simple sleep statement to give Google and the browser some time to respond. If I don't, the script will print the browser title and page source before it gets a chance to change to the results page.
+
+### Things to consider
+As with google_search_requests.py below.
+When writing this script, I learnt that Selenium isn't as simple as this script. The docs aren't always very clear (or _done_). I should probably find some course somewhere to learn how to use Selenium to its full extent.
+
+
 ## Google search using requests module
 I was asked to "use Python and the requests module to enter a search term in Google and recieve the results" for a job application. Thanks to mr. Lutterop for asking this question.
 
