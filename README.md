@@ -5,7 +5,7 @@ Python exercises to improve my skills
 'Use Selenium to enter a search term in Google and recieve the results' - also see 'Google search using requests module' below.
 
 ### Usage
-Make [the script](google_search_requests.py) executable (755 will do) and run:
+Make [the script](google_search_selenium.py) executable (755 will do) and run:
 
 ```
 ./google_search_selenium.py > google_search_selenium.out
