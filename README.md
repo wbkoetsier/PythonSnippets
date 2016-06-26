@@ -1,6 +1,23 @@
 # PythonExercises
 Python exercises to improve my skills
 
+## Tornado and websockets
+Just run
+
+```
+python server.py
+```
+
+or
+
+```
+python helloworld.py
+```
+
+and check out localhost:8888
+
+http://www.tornadoweb.org/en/stable/index.html
+
 ## Google search using Selenium
 'Use Selenium to enter a search term in Google and recieve the results' - also see 'Google search using requests module' below.
 
