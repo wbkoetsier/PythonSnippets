@@ -11,6 +11,8 @@ Some thoughts on approach.
 - I have options: parallel vs sync, scraping vs. API, implement word count vs word count API.
 
 ### v1
+At commit https://github.com/wbkoetsier/PythonSnippets/commit/86ec289d9abb4dd21e34130b342d82cd3a946152.
+
 I'll start out with a simple word count on some pages using the Wikipedia API.
 - Python 3.6, which is what I'm most familiar with. I'm also very fond of f-strings and type hinting.
 - Use the [WikiMedia API](https://www.mediawiki.org/wiki/API:Main_page) to fetch page contents. There are some
