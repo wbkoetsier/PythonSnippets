@@ -4,15 +4,11 @@
 This is an assignment I was given for a job application. The goal is simple: what is the top 10 most used words on some
 (randomly chosen) Wikipedia pages? Performance should be optimal.
 
+## Usage
+Just run main as is. Requires Python 3.6, `requests`, `mwparserfromhell`.
+
 ## Approach
-Some thoughts on approach.
-- Fetch the data in parallel, if Python 3.5 or 3.6 (aiohttp). I already have code for that.
-- Does Wikipedia have an API?
-- I have options: parallel vs sync, scraping vs. API, implement word count vs word count API.
-
 ### v1
-At commit https://github.com/wbkoetsier/PythonSnippets/commit/86ec289d9abb4dd21e34130b342d82cd3a946152.
-
 I'll start out with a simple word count on some pages using the Wikipedia API.
 - Python 3.6, which is what I'm most familiar with. I'm also very fond of f-strings and type hinting.
 - Use the [WikiMedia API](https://www.mediawiki.org/wiki/API:Main_page) to fetch page contents. There are some
@@ -31,6 +27,34 @@ I'll start out with a simple word count on some pages using the Wikipedia API.
   `str.replace` or `re.sub`.
 - Write a manual, random list of page titles.
 
+### Ideas for additional versions
+- Speed up fetching pages.
+  - Replace the manual title list with a query (for example, 'find me all page titles for pages about Monty Python' or
+    '...for pages starting with M' or such, or even by geographic location) on the API. This way, I can run it for many
+    more pages.
+    - Would probably require the query action with `list` or `generator` search option.
+  - See how to use the API's `generator` output and `continue` (in whatever form), it might be useful for speeding up.
+  - Parallelise the requests using my `parallel_requests` code (aiohttp using async/await syntax, Python 3.5+).
+    - How does this play with the API's generator?
+    - Should I parse contents directly after the request, or at a different point?
+  - Is the mw parser from hell the most efficient? I could benchmark using several mw parsers, or also include fetching
+    pages as HTML and parse using BeautifulSoup4.
+- Speed up word count.
+  - Benchmark the usage of `Counter`.
+  - Benchmark the use of `str.translate`.
+  - I suspect these 2 are already among the most efficient solutions when parsing significant amounts of data.
+  - Atm, I loop over all pages to concatenate the texts into one large string. If I were to fetch many more pages, that
+  would be inefficient. I could find a way to parallelise that using async/await syntax. Or look into counting per page
+  and then zipping the counts for all pages into one count.
+
+Other things I could consider:
+- Use a Wikipedia database. There's a [dump that can be downloaded](https://en.wikipedia.org/wiki/Wikipedia:Database_download#Why_not_just_retrieve_data_from_wikipedia.org_at_runtime?),
+  or there's DBpedia. What would be most efficient? If I wanted to, I could do map/reduce kind of stuff...
+- As a showcase, I could write my own most common word counter. It would involve efficiently sorting the list of words.
+- On a simpler note, I could make a version that works on Python 3.4, or on Python 2.7.
+- Look into using Pandas or numpy, would these be helpful when counting the most common words among a great many of
+  Wikipedia pages?
+
 ## Requirements
 Python version: 3.6
 
@@ -42,7 +66,6 @@ Install packages:
 - `str.translate` (and `str.maketrans`): Python 3.
 - Type hinting: Python 3.5+.
 - f-strings (`f'some {var}'`): Python 3.6+.
-- `aiohttp` with `async`/`await` syntax: Python 3.5+
 
 
 
