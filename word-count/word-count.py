@@ -53,4 +53,5 @@ if __name__ == '__main__':
     titles = ['Monty Python and the Holy Grail', 'there is no such page with this title', 'Monty Python',
               'Terry Gilliam', 'Application_programming_interface', 'Robotic process automation',
               'IBM_Spectrum_Scale', 'William Hartnell']
-    print(get_most_common_words(titles))
+    wrds = get_most_common_words(titles)
+    print(wrds)
