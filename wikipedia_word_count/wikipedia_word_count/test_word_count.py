@@ -1,7 +1,8 @@
 import unittest
-from .word_count import word_ranking
+from .word_count import word_ranking, get_wikipedia_page, parse_wiki_page
 
 
+@unittest.skip
 class TestWordCount(unittest.TestCase):
 
     @classmethod
@@ -26,3 +27,45 @@ class TestWordCount(unittest.TestCase):
     def test_no_duplicate_words_in_ranking(self):
         words = [w[0] for w in self.ranking]
         self.assertEqual(len(words), len(set(words)))
+
+
+class TestGetSingleWikipediaPage(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.title = 'Monty Python and the Holy Grail'
+        cls.wmpage = get_wikipedia_page(cls.title)
+
+    def test_get_wikipedia_page_returns_contents_as_json(self):
+        """Test that the contents of a page are fetched and returned as wm json"""
+        self.assertIsInstance(self.wmpage, dict)
+        # the json dict should contain the following fields, field 'warnings' is optional
+        for field in ['continue', 'query']:
+            self.assertIn(field, self.wmpage)
+        # query field has one key: pages, which itself is a dict with one key, a page id
+        # that page id dict contains the pageid, ns, title and revisions
+        for pageid, page in self.wmpage.get('query', {}).get('pages', {}).items():
+            self.assertIsInstance(page, dict)
+            self.assertEqual(self.title, page.get('title', ''))
+            self.assertIn('revisions', page)
+
+    @unittest.skip('expensive')
+    def test_get_wikipedia_page_accepts_empty_title(self):
+        r = get_wikipedia_page('')
+        self.assertIsInstance(r, dict)
+        self.assertIn('batchcomplete', r)
+        self.assertFalse(r.get('query', {}).get('pages', {}).get('revisions'))
+
+    def test_title_does_not_exist_returns_empty_string(self):
+        r = get_wikipedia_page('there is no such page with this title')
+        self.assertIsInstance(r, dict)
+        self.assertIn('batchcomplete', r)
+        c = parse_wiki_page(r)
+        self.assertFalse(c)
+
+
+    def test_parse_contents(self):
+        """Test that contents are parsed to text (str)"""
+        c = parse_wiki_page(self.wmpage)
+        self.assertIsInstance(c, str)
+        self.assertTrue(c)  # non-empty string
