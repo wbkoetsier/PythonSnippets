@@ -19,16 +19,19 @@ def get_wikipedia_page(title: str="") -> dict:
     return r.json()
 
 
-def parse_wiki_page(wmpage: dict, title: str='') -> str:
+def parse_wiki_page(wmpage: dict, title: str) -> str:
     """Extract the text contents of the given wikipedia page"""
     pages = wmpage.get('query', {}).get('pages', {})
     # rvlimit is 1, so there'll be 1 page/revision
-    page_id, page = pages.popitem() if pages else {}
-    if page_id == '-1':
+    (page_id, page) = pages.popitem() if pages else (-1, None)
+    if str(page_id) == '-1':
         print(f"No page found with title '{title}'")
         return ''
     rev = page.get('revisions', [])
     # each revision has a key '*' that contains the actual contents
-    page_content = rev[0].get('*', '') if rev else ''
+    if rev:
+        page_content = rev[0].get('*', '')
+    else:
+        return ''
     parsed_content = mwparserfromhell.parse(page_content)
     return parsed_content.strip_code(collapse=False)

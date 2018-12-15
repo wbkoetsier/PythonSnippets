@@ -49,23 +49,29 @@ class TestGetSingleWikipediaPage(unittest.TestCase):
             self.assertEqual(self.title, page.get('title', ''))
             self.assertIn('revisions', page)
 
-    @unittest.skip('expensive')
+    # @unittest.skip('expensive')
     def test_get_wikipedia_page_accepts_empty_title(self):
         r = get_wikipedia_page('')
         self.assertIsInstance(r, dict)
         self.assertIn('batchcomplete', r)
         self.assertFalse(r.get('query', {}).get('pages', {}).get('revisions'))
 
-    def test_title_does_not_exist_returns_empty_string(self):
-        r = get_wikipedia_page('there is no such page with this title')
+    def test_parse_contents_returns_empty_string_on_title_does_not_exist(self):
+        title = 'there is no such page with this title'
+        r = get_wikipedia_page(title)
         self.assertIsInstance(r, dict)
         self.assertIn('batchcomplete', r)
-        c = parse_wiki_page(r)
+        c = parse_wiki_page(r, title)
+        self.assertIsInstance(c, str)
         self.assertFalse(c)
 
+    def test_parse_contents_returns_empty_string_on_empty_title(self):
+        r = get_wikipedia_page('')
+        c = parse_wiki_page(r, '')
+        self.assertIsInstance(c, str)
+        self.assertFalse(c)
 
-    def test_parse_contents(self):
-        """Test that contents are parsed to text (str)"""
-        c = parse_wiki_page(self.wmpage)
+    def test_parse_contents_returns_non_empty_string_on_existing_title(self):
+        c = parse_wiki_page(self.wmpage, self.title)
         self.assertIsInstance(c, str)
         self.assertTrue(c)  # non-empty string
