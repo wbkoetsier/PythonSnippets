@@ -5,6 +5,7 @@ import asyncio
 import time
 from collections import Counter
 
+__all__ = ['get_most_common_words', 'API_URL']
 
 TRANSLATION_TABLE = str.maketrans('', '', '()/\\.,;:\'\"*&-')
 API_URL = "https://en.wikipedia.org/w/api.php"
@@ -18,12 +19,12 @@ async def get_wikipedia_page(session: aiohttp.ClientSession, title: str) -> dict
     """This coroutine returns the response data for the given Wikipedia page title (json)"""
     params = {"action": "query", "prop": "revisions", "rvlimit": 1,
               "rvprop": "content", "format": "json", "titles": title}
-    print(f'start fetch {title}')
+    # print(f'start fetch {title}')
     start = time.time()
     async with asyncio.Semaphore(CONCURRENCY), session.get(url=API_URL, params=params) as response:
         assert response.status == 200
         data = await response.json()
-    print('fetching {} took {:.2f} seconds'.format(title, time.time() - start))
+    # print('fetching {} took {:.2f} seconds'.format(title, time.time() - start))
     return data
 
 
@@ -51,8 +52,8 @@ async def gather_parsed_wikipedia_pages_by_title(titles: List[str]) -> List[dict
 
     Sort order is preserved (see also the docs on asyncio.gather and https://github.com/python/asyncio/issues/432).
     """
-    print('start get')
-    start = time.time()
+    # print('start get')
+    # start = time.time()
     # the session shouldn't be created outside of a coroutine so it needs to be here rather than in a constructor
     # see also https://github.com/aio-libs/aiohttp/issues/2473
     async with aiohttp.ClientSession(raise_for_status=True) as session:
@@ -60,7 +61,7 @@ async def gather_parsed_wikipedia_pages_by_title(titles: List[str]) -> List[dict
         coroutines = (parse_wikipedia_page(session=session, title=title) for title in titles)
         # gather the responses, add any exceptions to the list instead of raising
         responses = await asyncio.gather(*coroutines, return_exceptions=True)
-    print('gathering all pages took {:.2f} seconds'.format(time.time() - start))
+    # print('gathering all pages took {:.2f} seconds'.format(time.time() - start))
     return responses
 
 

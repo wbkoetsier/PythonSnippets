@@ -58,7 +58,9 @@ Other things I could consider:
 ### v2: async/await and aiohttp
 Using `aiohttp==3.4.4` and Python 3.6.
 
-I've also added a timer to the version 1, so the versions can be compared.
+### Compare versions
+Change the top how many words to rank (`top`), how many times to run v1 + async (`iterations`) and how many titles to
+fetch (`number_of_titles`).
 
 
 ## Requirements

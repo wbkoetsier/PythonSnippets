@@ -4,6 +4,9 @@ from collections import Counter
 from typing import List, Union
 import time
 
+__all__ = ['get_most_common_words']
+
+
 API_URL = "https://en.wikipedia.org/w/api.php"
 TRANSLATION_TABLE = str.maketrans('', '', '()/\\.,;:\'\"*&-')
 
