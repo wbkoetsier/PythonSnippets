@@ -5,7 +5,7 @@ This is an assignment I was given for a job application. The goal is simple: wha
 (randomly chosen) Wikipedia pages? Performance should be optimal.
 
 ## Usage
-Just run main as is. Requires Python 3.6, `requests`, `mwparserfromhell`.
+Just run main as is for both versions. Requires Python 3.6, `requests`, `mwparserfromhell`.
 
 ## Approach
 ### v1
@@ -54,6 +54,12 @@ Other things I could consider:
 - On a simpler note, I could make a version that works on Python 3.4, or on Python 2.7.
 - Look into using Pandas or numpy, would these be helpful when counting the most common words among a great many of
   Wikipedia pages?
+
+### v2: async/await and aiohttp
+Using `aiohttp==3.4.4` and Python 3.6.
+
+I've also added a timer to the version 1, so the versions can be compared.
+
 
 ## Requirements
 Python version: 3.6
