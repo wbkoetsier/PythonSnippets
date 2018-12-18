@@ -8,7 +8,7 @@ from string import punctuation
 
 __all__ = ['get_most_common_words', 'API_URL']
 
-TRANSLATION_TABLE = str.maketrans('', '', '()/\\.,;:\'\"*&-')
+TRANSLATION_TABLE = str.maketrans('', '', punctuation)
 API_URL = "https://en.wikipedia.org/w/api.php"
 CONCURRENCY = 10  # asyncio.Semaphore defaults to 1
 # When closing event loop, wait x seconds for the underlying SSL connections to close
@@ -34,7 +34,7 @@ async def parse_wikipedia_page(session: aiohttp.ClientSession, title: str) -> st
     (page_id, page) = pages.popitem() if pages else (-1, None)
     if str(page_id) == '-1':
         print(f"No page found with title '{title}'")
-        return f'oops, {title}'
+        return ''
     rev = page.get('revisions', [])
     # each revision has a key '*' that contains the actual contents
     if rev:
