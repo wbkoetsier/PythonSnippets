@@ -4,10 +4,11 @@ import aiohttp
 import asyncio
 import time
 from collections import Counter
+from string import punctuation
 
 __all__ = ['get_most_common_words', 'API_URL']
 
-TRANSLATION_TABLE = str.maketrans('', '', '()/\\.,;:\'\"*&-')
+TRANSLATION_TABLE = str.maketrans('', '', punctuation)
 API_URL = "https://en.wikipedia.org/w/api.php"
 CONCURRENCY = 10  # asyncio.Semaphore defaults to 1
 # When closing event loop, wait x seconds for the underlying SSL connections to close
