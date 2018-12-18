@@ -8,7 +8,7 @@ from string import punctuation
 
 __all__ = ['get_most_common_words', 'API_URL']
 
-TRANSLATION_TABLE = str.maketrans('', '', punctuation)
+TRANSLATION_TABLE = str.maketrans('', '', '()/\\.,;:\'\"*&-')
 API_URL = "https://en.wikipedia.org/w/api.php"
 CONCURRENCY = 10  # asyncio.Semaphore defaults to 1
 # When closing event loop, wait x seconds for the underlying SSL connections to close
@@ -20,12 +20,9 @@ async def get_wikipedia_page(session: aiohttp.ClientSession, title: str) -> dict
     """This coroutine returns the response data for the given Wikipedia page title (json)"""
     params = {"action": "query", "prop": "revisions", "rvlimit": 1,
               "rvprop": "content", "format": "json", "titles": title}
-    # print(f'start fetch {title}')
-    start = time.time()
     async with asyncio.Semaphore(CONCURRENCY), session.get(url=API_URL, params=params) as response:
         assert response.status == 200
         data = await response.json()
-    # print('fetching {} took {:.2f} seconds'.format(title, time.time() - start))
     return data
 
 
@@ -37,7 +34,7 @@ async def parse_wikipedia_page(session: aiohttp.ClientSession, title: str) -> st
     (page_id, page) = pages.popitem() if pages else (-1, None)
     if str(page_id) == '-1':
         print(f"No page found with title '{title}'")
-        return ''
+        return f'oops, {title}'
     rev = page.get('revisions', [])
     # each revision has a key '*' that contains the actual contents
     if rev:

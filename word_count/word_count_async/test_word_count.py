@@ -5,6 +5,7 @@ from .word_count import gather_parsed_wikipedia_pages_by_title, get_wikipedia_pa
 from .word_count import WAIT_FOR_CONNECTION_CLOSE
 import aiohttp
 import asyncio
+from string import punctuation
 
 
 class TestGetMostCommonWords(unittest.TestCase):
@@ -15,22 +16,27 @@ class TestGetMostCommonWords(unittest.TestCase):
         titles = ['Monty Python and the Holy Grail', 'there is no such page with this title', 'Monty Python',
                   'Terry Gilliam', '', 'Application_programming_interface', 'Robotic process automation',
                   'IBM_Spectrum_Scale', 'William Hartnell']
-        cls.ranking = get_most_common_words(titles)
+        cls.ranking = get_most_common_words(titles, top=1000)
+        cls.top_ranking = cls.ranking[:10]
 
     def test_returns_word_ranking_as_list_of_tuples(self):
         self.assertIsInstance(self.ranking, list)
-        for elem in self.ranking:
+        for elem in self.top_ranking:
             self.assertIsInstance(elem, tuple)
             self.assertIsInstance(elem[0], str)
             self.assertIsInstance(elem[1], int)
 
     def test_ranking_is_reverse_ordered(self):
-        counts = [c[1] for c in self.ranking]
+        counts = [c[1] for c in self.top_ranking]
         self.assertEqual(counts, sorted(counts, reverse=True))
 
     def test_no_duplicate_words_in_ranking(self):
         words = [w[0] for w in self.ranking]
         self.assertEqual(len(words), len(set(words)))
+
+    def test_no_special_characters_in_ranking(self):
+        self.assertFalse([w[0] for w in self.ranking if
+                          [c for c in filter(lambda ch: ch in punctuation, w[0])]])
 
 
 class TestGetSingleWikipediaPage(unittest.TestCase):
