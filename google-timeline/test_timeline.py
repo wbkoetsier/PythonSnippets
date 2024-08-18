@@ -62,6 +62,29 @@ class TestTimeline(unittest.TestCase):
             "startTimestamp": "2024-07-12T23:00:00.000Z",
             "endTimestamp": "2024-07-13T01:00:00.000Z"
         }}))
+    
+    def test_is_within_time_range(self):
+        # all durations are UTC and it's July so the durations are 2hrs early for Amsterdam daylight saving time
+        self.assertTrue(is_within_time_range({"duration": {
+            "startTimestamp": "2024-07-08T10:00:00.000Z",
+            "endTimestamp": "2024-07-08T11:00:00.000Z"
+        }}))
+        # not a weekday
+        self.assertFalse(is_within_time_range({"duration": {
+            "startTimestamp": "2024-07-07T10:00:00.000Z",
+            "endTimestamp": "2024-07-07T11:00:00.000Z"
+        }}))
+        # too late on a Thursday
+        self.assertFalse(is_within_time_range({"duration": {
+            "startTimestamp": "2024-07-11T18:00:00.000Z",
+            "endTimestamp": "2024-07-11T19:00:00.000Z"
+        }}))
+        # starts too early on a Thursday
+        self.assertFalse(is_within_time_range({"duration": {
+            "startTimestamp": "2024-07-11T03:55:00.000Z",
+            "endTimestamp": "2024-07-11T05:00:00.000Z"
+        }}))
+
 
     def test_is_within_date_range(self):
         # TODO

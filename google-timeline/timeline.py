@@ -4,8 +4,8 @@ import logging
 from enum import Enum
 from pathlib import Path
 from typing import Generator, Tuple, Dict, List
-from datetime import datetime, date
-from geopy.distance import geodesic
+from datetime import datetime, time
+import pytz
 
 
 # Configure logging
@@ -68,33 +68,46 @@ def item_is_on_a_weekday(item: dict) -> bool:
     return start.weekday() < 5 and end.weekday() < 5
 
 
-def is_within_date_range(item: dict) -> bool:
+def is_within_time_range(item):
     """
-    Check if the activity segment is within the date range.
+    Time range is: Mon 06-18:30, Tue 06-18, Wed 06-22, Thu 06-14, Fri 06-16 local timezone.
+    Duration timestamps given in UTC.
 
     Args:
-        item (dict): The activity segment object.
+        item (dict): The timeline object, which has a duration key.
 
     Returns:
-        bool: True if the item is within the date range, False otherwise.
+        bool: True if the item is within the time range, False otherwise.
     """
-    # TODO hard coded date range
-    # start: ma 2/1
-    # meivakantie: ma 29/4 t/m vr 3/5
-    # bouwvak: ma 7/8 t/m vr 25/8
-    # kerst: ma 25/12 t/m 31/12
+    # Define the time ranges for each weekday
+    days = {
+        0: (time(6, 0), time(18, 30)),  # Monday
+        1: (time(6, 0), time(18, 0)),   # Tuesday
+        2: (time(6, 0), time(22, 0)),   # Wednesday
+        3: (time(6, 0), time(14, 0)),   # Thursday
+        4: (time(6, 0), time(16, 0))    # Friday
+    }
 
-    # list of date range tuples, start time and end time
-    # out = [
-    #     (datetime.strptime('2023-01-01', '%Y-%m-%d'), datetime.strptime('2023-01-01', '%Y-%m-%d')),
-    #     (datetime.strptime('2023-04-29', '%Y-%m-%d'), datetime.strptime('2023-05-03', '%Y-%m-%d')),
-    #     (datetime.strptime('2023-08-07', '%Y-%m-%d'), datetime.strptime('2023-08-25', '%Y-%m-%d')),
-    #     (datetime.strptime('2023-12-25', '%Y-%m-%d'), datetime.strptime('2023-12-31', '%Y-%m-%d'))
-    # ]
-    # start_timestamp = datetime.fromtimestamp(item['duration']['startTimestamp'] // 1000)
-    # end_timestamp = datetime.fromtimestamp(item['duration']['endTimestamp'] // 1000)
-    #return start_timestamp.date() == date(2023, 1, 2) and end_timestamp.date() == date(2023, 1, 2)
-    return True
+    start_str = item.get('duration', {}).get('startTimestamp', '')
+    end_str = item.get('duration', {}).get('endTimestamp', '')
+
+    # Define the timezone
+    timezone = pytz.timezone('Europe/Amsterdam')
+
+    # Convert the timestamps to datetime objects with timezone awareness
+    start = datetime.fromisoformat(start_str.replace("Z", "+00:00")).astimezone(timezone)
+    end = datetime.fromisoformat(end_str.replace("Z", "+00:00")).astimezone(timezone)
+
+    # Check if both start and end are on weekdays
+    if start.weekday() < 5 and end.weekday() < 5:
+        start_day = days[start.weekday()]
+        end_day = days[end.weekday()]
+
+        # Check if the times are within the allowed range
+        if start_day[0] <= start.time() <= start_day[1] and end_day[0] <= end.time() <= end_day[1]:
+            return True
+
+    return False
 
 
 def is_in_passenger_vehicle(activity_segment: dict) -> bool:
@@ -127,7 +140,8 @@ def meets_requirements(item: dict) -> bool:
     """
     activity_segment = item.get('activitySegment', {})
     return (is_in_passenger_vehicle(activity_segment) 
-            and item_is_on_a_weekday(activity_segment))
+            and item_is_on_a_weekday(activity_segment)
+            and is_within_time_range(activity_segment))
 
 
 def is_place_visit(item: dict) -> bool:
@@ -292,7 +306,7 @@ async def get_segments_from_timeline_files(path: Path, year: int=2023) -> List[D
 
 if __name__ == "__main__":
     my_path = Path('C:/Users/maitr/OneDrive/Documenten/Wil/Takeout/Locatiegeschiedenis (Tijdlijn)/Semantic Location History/')
-    segments = asyncio.run(get_segments_from_timeline_files(my_path, 2023))
+    segments = asyncio.run(get_segments_from_timeline_files(my_path, 2024))
     if segments:
         with open('segments2024.json', 'a') as file:
             json.dump(segments, file, indent=2)
