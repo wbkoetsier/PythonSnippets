@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Generator, List, Tuple, Union
 import json
 import logging
@@ -8,7 +9,7 @@ from datetime import datetime, time
 
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -49,6 +50,30 @@ def get_timeline_object_generator(path_to_folder: Path, year: int = 2023) -> Gen
             with open(file_path, 'r', encoding='utf-8') as file:
                 data = json.load(file)
             yield from (item for item in data['timelineObjects'])
+
+
+def clean_timeline_object(item: dict) -> dict:
+    """
+    Clean the timeline object by removing unnecessary keys.
+    """
+    place_visit = item.get('placeVisit')
+    activity_segment = item.get('activitySegment')
+    item = {} # todo dit kan mooier
+    if place_visit:
+        obj = {}
+        for key in place_visit.keys():
+            if key in ['location', 'duration']:
+                obj[key] = place_visit.get(key)
+        item["placeVisit"] = obj
+        return item
+    elif activity_segment:
+        obj = {}
+        for key in activity_segment.keys():
+            if key in ["startLocation", "endLocation", "distance", 'activityType', 'duration']:
+                obj[key] = activity_segment.get(key)
+        item["activitySegment"] = obj
+        return item
+    raise ValueError("No place visit or activity segment found in the timeline object.")
 
 
 def is_on_a_weekday(timeline_object: dict) -> bool:
@@ -122,10 +147,6 @@ def peek(lst, idx):
         return None
 
 
-def is_a(obj):
-    return "a" in obj
-
-
 def is_drive(item: dict) -> bool:
     return is_activity_segment(item) and is_in_passenger_vehicle(item["activitySegment"])
 
@@ -133,10 +154,6 @@ def is_drive(item: dict) -> bool:
 def is_not_drive(item: dict) -> bool:
     # not the same as not is_drive ;-)
     return is_activity_segment(item) and not is_in_passenger_vehicle(item["activitySegment"])
-
-
-def is_p(obj):
-    return "p" in obj
 
 
 def peek(lst, idx):
@@ -187,6 +204,7 @@ def make_segment(current_obj, gen, segment) -> Tuple[dict, Generator, list]:
     segment.append(current_obj)
     try:
         nxt_obj = next(gen)
+        nxt_obj = clean_timeline_object(nxt_obj)
     except StopIteration:
         logger.info("No more objects found, return segment")
         # return current_obj, gen, segment
@@ -262,8 +280,18 @@ def make_bins(current_obj, current_bin, gen, bins) -> List[list]:
 def main(gen):
     try:
         first_obj = next(gen)
+        first_obj = clean_timeline_object(first_obj)
     except StopIteration:
         logger.error("No objects found, so no bins created")
         return []
-    bins = make_bins(first_obj, [], gen, [])
-    
+    bins = make_bins(current_obj=first_obj, current_bin=[], gen=gen, bins=[])
+
+    # Write bins to file
+    with open('bins.json', 'w') as file:
+        json.dump(bins, file)
+
+if __name__ == "__main__":
+    pth = Path(os.path.expanduser('~'), 'OneDrive', 'Documenten', 'Wil', 'Takeout', 'Locatiegeschiedenis (Tijdlijn)', 'Semantic Location History')
+
+    gen = get_timeline_object_generator(pth, 2023)
+    main(gen)
