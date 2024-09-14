@@ -1,3 +1,4 @@
+import csv
 import logging
 import os
 from typing import Generator, List, Tuple, Union
@@ -58,7 +59,7 @@ def clean_timeline_object(item: dict) -> dict:
     """
     place_visit = item.get('placeVisit')
     activity_segment = item.get('activitySegment')
-    item = {} # todo dit kan mooier
+    item = {}  # todo dit kan mooier
     if place_visit:
         obj = {}
         for key in place_visit.keys():
@@ -277,7 +278,44 @@ def make_bins(current_obj, current_bin, gen, bins) -> List[list]:
     return bins
 
 
+def extract_row(bin: dict) -> dict:
+    """
+    Extract the row data from the bin.
+
+    :param bin: The bin to extract the row data from.
+    :return: The row data.
+    """
+    row = {}
+    # het adres van de startlocatie is het adres van de laatste placeVisit
+    for item in reversed(bin[0]):
+        if is_place_visit(item):
+            location = item["placeVisit"].get("location", {})
+            break
+    row["start_location_name"] = location.get("name", "")
+    row["start_location_address"] = location.get("address", "")
+
+    # de reis is het totaal van alle auto-activiteiten
+    segment = bin[1]
+    # start is van de eerste activitySegment
+    row["activity_start"] = segment[0]["activitySegment"].get("duration", {}).get("startTimestamp", "")
+    # eind is van de laatste activitySegment
+    row["activity_end"] = segment[-1]["activitySegment"].get("duration", {}).get("endTimestamp", "")
+    # afstand is de som van alle activitySegments
+    row["distance"] = sum(item["activitySegment"].get("distance", 0) for item in segment)
+
+    # het adres van de eindlocatie is het adres van de eerste placeVisit
+    for item in bin[2]:
+        if is_place_visit(item):
+            location = item["placeVisit"].get("location", {})
+            break
+    row["end_location_name"] = location.get("name", "")
+    row["end_location_address"] = location.get("address", "")
+
+    return row
+
+
 def main(gen):
+    start = datetime.now()
     try:
         first_obj = next(gen)
         first_obj = clean_timeline_object(first_obj)
@@ -285,13 +323,66 @@ def main(gen):
         logger.error("No objects found, so no bins created")
         return []
     bins = make_bins(current_obj=first_obj, current_bin=[], gen=gen, bins=[])
+    logger.info(f"Found {len(bins)} bins")
+    logger.info(f"Execution time finding bins: {datetime.now() - start}")
 
-    # Write bins to file
-    with open('bins.json', 'w') as file:
+    # Dump raw bins to json file
+    with open('bins.json', 'w', encoding='utf-8') as file:
         json.dump(bins, file)
 
+    # write as csv
+    with open('bins.csv', 'w', newline='', encoding='utf-8') as csv_file:
+        csv_writer = csv.writer(csv_file, delimiter=';')
+
+        # Write the header
+        header = {
+            "start_location_name": "Startlocatie Naam",
+            "start_location_address": "Startlocatie Adres",
+            "activity_start": "Begintijd reis",
+            "activity_end": "Eindtijd reis",
+            "distance": "Afstand in m",
+            "end_location_name": "Eindlocatie Naam",
+            "end_location_address": "Eindlocatie Adres",
+        }
+        csv_writer.writerow(
+            [
+                header["start_location_name"],
+                header["start_location_address"],
+                header["activity_start"],
+                header["activity_end"],
+                header["distance"],
+                header["end_location_name"],
+                header["end_location_address"],
+            ]
+        )
+
+        # Write the data
+        for bin in bins:
+            row = extract_row(bin)
+            csv_writer.writerow(
+                [
+                    row["start_location_name"],
+                    row["start_location_address"],
+                    row["activity_start"],
+                    row["activity_end"],
+                    row["distance"],
+                    row["end_location_name"],
+                    row["end_location_address"],
+                ]
+            )
+    logger.info("Bins written to bins.csv")
+
+
 if __name__ == "__main__":
-    pth = Path(os.path.expanduser('~'), 'OneDrive', 'Documenten', 'Wil', 'Takeout', 'Locatiegeschiedenis (Tijdlijn)', 'Semantic Location History')
+    pth = Path(
+        os.path.expanduser('~'),
+        'OneDrive',
+        'Documenten',
+        'Wil',
+        'Takeout',
+        'Locatiegeschiedenis (Tijdlijn)',
+        'Semantic Location History',
+    )
 
     gen = get_timeline_object_generator(pth, 2023)
     main(gen)
