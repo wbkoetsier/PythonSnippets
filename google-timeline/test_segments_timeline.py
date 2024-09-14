@@ -5,6 +5,7 @@ import pytest
 from segments_timeline import (
     find_first_place_segment,
     get_timeline_object_generator,
+    filter_keys,
     clean_timeline_object,
     is_place_visit,
     is_activity_segment,
@@ -26,6 +27,16 @@ def mock_path_exists(mocker):
 def mock_file_open(mocker):
     return mocker.patch("builtins.open", mock_open(read_data='{"timelineObjects": [{"id": 1}, {"id": 2}]}'))
 
+
+def test_filter_keys():
+    assert filter_keys(
+        {
+            "key1": "value1",
+            "key2": "value2",
+            "key3": "value3",
+        },
+        ["key1", "key3"],
+    ) == {"key1": "value1", "key3": "value3"}
 
 def test_clean_timeline_object_place_visit():
     item = {
@@ -83,15 +94,18 @@ def test_get_timeline_object_generator_file_not_found(mock_path_exists):
     mock_path_exists.return_value = False
     assert [] == list(get_timeline_object_generator(Path("/a/path"), 1993))
 
+
 def test_is_place_visit():
     assert is_place_visit({'placeVisit': {}})
     assert not is_place_visit({'noPlaceVisit': {}})
     assert not is_place_visit({'placeVisit': {}, 'noPlaceVisit': {}})
 
+
 def test_is_activity_segment():
     assert is_activity_segment({'activitySegment': {}})
     assert not is_activity_segment({'noActivitySegment': {}})
     assert not is_place_visit({'activitySegment': {}, 'noActivitySegment': {}})
+
 
 def test_is_in_passenger_vehicle():
     assert is_in_passenger_vehicle({"activityType": "IN_PASSENGER_VEHICLE"})
@@ -99,37 +113,41 @@ def test_is_in_passenger_vehicle():
     assert not is_in_passenger_vehicle({"noActivityType": "BLABLA"})
     assert not is_in_passenger_vehicle({"noActivityType": "IN_PASSENGER_VEHICLE"})
 
+
 def test_item_is_on_a_weekday():
     # a random week in July 2024, starting on a Monday
     for d in range(8, 13):
         assert is_on_a_weekday(
-                {
-                    "duration": {
-                        "startTimestamp": f"2024-07-{d:02}T12:00:00.000Z",
-                        "endTimestamp": f"2024-07-{d:02}T13:00:00.000Z",
-                    }
+            {
+                "duration": {
+                    "startTimestamp": f"2024-07-{d:02}T12:00:00.000Z",
+                    "endTimestamp": f"2024-07-{d:02}T13:00:00.000Z",
                 }
-            )
+            }
+        )
+
 
 def test_item_is_not_on_a_weekday():
     for d in range(13, 15):
         assert not is_on_a_weekday(
-                {
-                    "duration": {
-                        "startTimestamp": f"2024-07-{d:02}T12:00:00.000Z",
-                        "endTimestamp": f"2024-07-{d:02}T13:00:00.000Z",
-                    }
+            {
+                "duration": {
+                    "startTimestamp": f"2024-07-{d:02}T12:00:00.000Z",
+                    "endTimestamp": f"2024-07-{d:02}T13:00:00.000Z",
                 }
-            )
+            }
+        )
+
 
 def test_item_is_not_on_a_weekday_if_night_and_starts_or_ends_in_weekend():
     # and a night time situation
     assert not is_on_a_weekday(
-            {"duration": {"startTimestamp": "2024-07-07T23:00:00.000Z", "endTimestamp": "2024-07-08T01:00:00.000Z"}}
-        )
+        {"duration": {"startTimestamp": "2024-07-07T23:00:00.000Z", "endTimestamp": "2024-07-08T01:00:00.000Z"}}
+    )
     assert not is_on_a_weekday(
-            {"duration": {"startTimestamp": "2024-07-12T23:00:00.000Z", "endTimestamp": "2024-07-13T01:00:00.000Z"}}
-        )
+        {"duration": {"startTimestamp": "2024-07-12T23:00:00.000Z", "endTimestamp": "2024-07-13T01:00:00.000Z"}}
+    )
+
 
 def test_peek():
     lst = [1, 2, 3, 4, 7]
@@ -140,6 +158,7 @@ def test_peek():
     assert 7 == peek(lst, 4)
     assert None == peek(lst, 5)
     assert None == peek(lst, -6)
+
 
 def test_make_segment_with_activity():
     obj_gen = (
@@ -156,10 +175,11 @@ def test_make_segment_with_activity():
 
     assert {"placeVisit": {"duration": 4}} == current_obj
     assert [
-            {"activitySegment": {"activityType": "WALKING", "duration": 1}},
-            {"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 2}},
-            {"activitySegment": {"activityType": "WALKING", "duration": 3}},
-        ] == actual_segment
+        {"activitySegment": {"activityType": "WALKING", "duration": 1}},
+        {"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 2}},
+        {"activitySegment": {"activityType": "WALKING", "duration": 3}},
+    ] == actual_segment
+
 
 def test_make_segment_with_address():
     obj_gen = (
@@ -183,16 +203,17 @@ def test_make_segment_with_address():
 
     assert {"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 10}} == current_obj
     assert [
-            {"placeVisit": {"duration": 1}},
-            {"activitySegment": {"activityType": "WALKING", "duration": 2}},
-            {"placeVisit": {"duration": 3}},
-            {"activitySegment": {"activityType": "WALKING", "duration": 4}},
-            {"placeVisit": {"duration": 5}},
-            {"activitySegment": {"activityType": "WALKING", "duration": 6}},
-            {"placeVisit": {"duration": 7}},
-            {"placeVisit": {"duration": 8}},
-            {"activitySegment": {"activityType": "WALKING", "duration": 9}},
-        ] == actual_segment
+        {"placeVisit": {"duration": 1}},
+        {"activitySegment": {"activityType": "WALKING", "duration": 2}},
+        {"placeVisit": {"duration": 3}},
+        {"activitySegment": {"activityType": "WALKING", "duration": 4}},
+        {"placeVisit": {"duration": 5}},
+        {"activitySegment": {"activityType": "WALKING", "duration": 6}},
+        {"placeVisit": {"duration": 7}},
+        {"placeVisit": {"duration": 8}},
+        {"activitySegment": {"activityType": "WALKING", "duration": 9}},
+    ] == actual_segment
+
 
 def test_make_bin():
     # bin is always place-segment, activity-segment, place-segment, first place-segment is the same as the last
@@ -230,20 +251,21 @@ def test_make_bin():
     assert {"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 14}} == current_obj
     assert 3 == len(actual_bin)
     assert [
-            [{"placeVisit": {"duration": 3}}],
-            [{"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 4}}],
-            [
-                {"placeVisit": {"duration": 5}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 6}},
-                {"placeVisit": {"duration": 7}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 8}},
-                {"placeVisit": {"duration": 9}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 10}},
-                {"placeVisit": {"duration": 11}},
-                {"placeVisit": {"duration": 12}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 13}},
-            ],
-        ] == actual_bin
+        [{"placeVisit": {"duration": 3}}],
+        [{"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 4}}],
+        [
+            {"placeVisit": {"duration": 5}},
+            {"activitySegment": {"activityType": "WALKING", "duration": 6}},
+            {"placeVisit": {"duration": 7}},
+            {"activitySegment": {"activityType": "WALKING", "duration": 8}},
+            {"placeVisit": {"duration": 9}},
+            {"activitySegment": {"activityType": "WALKING", "duration": 10}},
+            {"placeVisit": {"duration": 11}},
+            {"placeVisit": {"duration": 12}},
+            {"activitySegment": {"activityType": "WALKING", "duration": 13}},
+        ],
+    ] == actual_bin
+
 
 def test_make_last_bin():
     # the last bin could be incomplete
@@ -267,9 +289,10 @@ def test_make_last_bin():
     with pytest.raises(StopIteration):
         next(obj_gen)
     assert [
-            [{"placeVisit": {"duration": 1}}],
-            [{"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 2}}],
-        ] == actual_bin
+        [{"placeVisit": {"duration": 1}}],
+        [{"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 2}}],
+    ] == actual_bin
+
 
 def test_find_first_place_segment():
     obj_gen = (

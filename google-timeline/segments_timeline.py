@@ -53,6 +53,16 @@ def get_timeline_object_generator(path_to_folder: Path, year: int = 2023) -> Gen
             yield from (item for item in data['timelineObjects'])
 
 
+def filter_keys(source: dict, keys: list) -> dict:
+    """
+    Filter the unwanted keys from the source dict.
+    :param source: The source dict.
+    :param keys: The keys that should remain in the dict.
+    :return: The filtered dict.
+    """
+    return {key: source[key] for key in keys if key in source}
+
+
 def clean_timeline_object(item: dict) -> dict:
     """
     Clean the timeline object by removing unnecessary keys.
@@ -61,19 +71,9 @@ def clean_timeline_object(item: dict) -> dict:
     activity_segment = item.get('activitySegment')
     item = {}  # todo dit kan mooier
     if place_visit:
-        obj = {}
-        for key in place_visit.keys():
-            if key in ['location', 'duration']:
-                obj[key] = place_visit.get(key)
-        item["placeVisit"] = obj
-        return item
+        return {"placeVisit": filter_keys(place_visit, ['location', 'duration'])}
     elif activity_segment:
-        obj = {}
-        for key in activity_segment.keys():
-            if key in ["startLocation", "endLocation", "distance", 'activityType', 'duration']:
-                obj[key] = activity_segment.get(key)
-        item["activitySegment"] = obj
-        return item
+        return {"activitySegment": filter_keys(activity_segment, ['startLocation', 'endLocation', 'distance', 'activityType', 'duration'])}
     raise ValueError("No place visit or activity segment found in the timeline object.")
 
 
