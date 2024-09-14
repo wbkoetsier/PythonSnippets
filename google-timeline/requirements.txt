@@ -1,3 +1,5 @@
 geopy
 pandas
 pytz
+pytest
+pytest-mock
