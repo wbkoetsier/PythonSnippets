@@ -59,7 +59,7 @@ def timeline_object_hook(obj: dict) -> dict:
                 obj.get("activitySegment"), ['startLocation', 'endLocation', 'distance', 'activityType', 'duration']
             )
         }
-    if "duration" in obj:
+    if "duration" in obj and isinstance(obj["duration"], dict):
         obj["duration"]["startTimestamp"] = datetime.fromisoformat(obj["duration"]["startTimestamp"]).astimezone(TZ_AMS)
         obj["duration"]["endTimestamp"] = datetime.fromisoformat(obj["duration"]["endTimestamp"]).astimezone(TZ_AMS)
     return obj
@@ -249,6 +249,7 @@ def find_first_place_segment(first_object, gen) -> Tuple[dict, List[dict], Gener
 
 def is_in_date_range(datetime_obj: datetime) -> bool:
     holidays = [
+        (datetime(2023, 1, 1).astimezone(TZ_AMS), datetime(2023, 1, 8).astimezone(TZ_AMS)),  # nieuwjaar
         (datetime(2023, 5, 1).astimezone(TZ_AMS), datetime(2023, 5, 5).astimezone(TZ_AMS)),  # meivakantie
         (datetime(2023, 8, 7).astimezone(TZ_AMS), datetime(2023, 8, 25).astimezone(TZ_AMS)),  # bouwvak
         (datetime(2023, 12, 25).astimezone(TZ_AMS), datetime(2023, 12, 31).astimezone(TZ_AMS)),  # kerst
@@ -387,6 +388,14 @@ def extract_row(bin: dict) -> dict:
 
     return row
 
+def datetime_serializer(obj):
+    """
+    JSON serializer for objects not serializable by default json code.
+    """
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} not serializable")
+
 
 def main(gen):
     start = datetime.now()
@@ -401,7 +410,7 @@ def main(gen):
 
     # Dump raw bins to json file
     with open('bins.json', 'w', encoding='utf-8') as file:
-        json.dump(bins, file)
+        json.dump(bins, file, default=datetime_serializer)
 
     # write as csv
     with open('bins.csv', 'w', newline='', encoding='utf-8') as csv_file:
