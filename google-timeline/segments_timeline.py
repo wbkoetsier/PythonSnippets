@@ -7,6 +7,7 @@ import logging
 from enum import Enum
 from pathlib import Path
 from datetime import datetime, time
+from pytz import timezone
 
 
 # Configure logging
@@ -30,6 +31,40 @@ class Month(Enum):
     DECEMBER = 'DECEMBER'
 
 
+TZ_AMS = timezone('Europe/Amsterdam')
+
+
+def filter_keys(source: dict, keys: list) -> dict:
+    """
+    Filter the unwanted keys from the source dict.
+    :param source: The source dict.
+    :param keys: The keys that should remain in the dict.
+    :return: The filtered dict.
+    """
+    return {key: source[key] for key in keys if key in source}
+
+
+def timeline_object_hook(obj: dict) -> dict:
+    """
+    Hook to clean the timeline objects by removing unnecessary keys and converting the string timestamps to datetime
+    using the local timezone.
+    :param obj: The timeline object.
+    :return: The cleaned timeline object.
+    """
+    if is_place_visit(obj):
+        return {"placeVisit": filter_keys(obj.get("placeVisit"), ['location', 'duration'])}
+    if is_activity_segment(obj):
+        return {
+            "activitySegment": filter_keys(
+                obj.get("activitySegment"), ['startLocation', 'endLocation', 'distance', 'activityType', 'duration']
+            )
+        }
+    if "duration" in obj:
+        obj["duration"]["startTimestamp"] = datetime.fromisoformat(obj["duration"]["startTimestamp"]).astimezone(TZ_AMS)
+        obj["duration"]["endTimestamp"] = datetime.fromisoformat(obj["duration"]["endTimestamp"]).astimezone(TZ_AMS)
+    return obj
+
+
 def get_timeline_object_generator(path_to_folder: Path, year: int = 2023) -> Generator:
     """
     Generator function that yields each timeline object from each month in the given year from the Semantic Location
@@ -49,48 +84,8 @@ def get_timeline_object_generator(path_to_folder: Path, year: int = 2023) -> Gen
         else:
             logger.info(f"Reading JSON file from: {file_path}")
             with open(file_path, 'r', encoding='utf-8') as file:
-                data = json.load(file)
+                data = json.load(file, object_hook=timeline_object_hook)
             yield from (item for item in data['timelineObjects'])
-
-
-def filter_keys(source: dict, keys: list) -> dict:
-    """
-    Filter the unwanted keys from the source dict.
-    :param source: The source dict.
-    :param keys: The keys that should remain in the dict.
-    :return: The filtered dict.
-    """
-    return {key: source[key] for key in keys if key in source}
-
-
-def clean_timeline_object(item: dict) -> dict:
-    """
-    Clean the timeline object by removing unnecessary keys.
-    """
-    place_visit = item.get('placeVisit')
-    activity_segment = item.get('activitySegment')
-    item = {}  # todo dit kan mooier
-    if place_visit:
-        return {"placeVisit": filter_keys(place_visit, ['location', 'duration'])}
-    elif activity_segment:
-        return {"activitySegment": filter_keys(activity_segment, ['startLocation', 'endLocation', 'distance', 'activityType', 'duration'])}
-    raise ValueError("No place visit or activity segment found in the timeline object.")
-
-
-def is_on_a_weekday(timeline_object: dict) -> bool:
-    """
-    Check if the timeline object is on a weekday. Both start and end timestamps have to be on a weekday.
-
-    Args:
-        timeline_object (dict): The timeline object, which has a 'duration' key.
-
-    Returns:
-        bool: True if the item is on a weekday, False otherwise.
-    """
-
-    start = datetime.fromisoformat(timeline_object.get('duration', {}).get('startTimestamp', ''))
-    end = datetime.fromisoformat(timeline_object.get('duration', {}).get('endTimestamp', ''))
-    return start.weekday() < 5 and end.weekday() < 5
 
 
 def is_in_passenger_vehicle(activity_segment: dict) -> bool:
@@ -168,7 +163,7 @@ def peek(lst, idx):
 
 def make_segment(current_obj, gen, segment) -> Tuple[dict, Generator, list]:
     """
-    Create an activity or place segment.
+    Create an activity or place segment. A segment is a list of timeline objects.
 
     :param current_obj: The current timeline object to add to the segment.
     :param gen: The generator to get the next timeline object from.
@@ -205,7 +200,6 @@ def make_segment(current_obj, gen, segment) -> Tuple[dict, Generator, list]:
     segment.append(current_obj)
     try:
         nxt_obj = next(gen)
-        nxt_obj = clean_timeline_object(nxt_obj)
     except StopIteration:
         logger.info("No more objects found, return segment")
         # return current_obj, gen, segment
@@ -253,14 +247,92 @@ def find_first_place_segment(first_object, gen) -> Tuple[dict, List[dict], Gener
         return find_first_place_segment(current_obj, gen)
 
 
+def is_in_date_range(datetime_obj: datetime) -> bool:
+    holidays = [
+        (datetime(2023, 5, 1).astimezone(TZ_AMS), datetime(2023, 5, 5).astimezone(TZ_AMS)),  # meivakantie
+        (datetime(2023, 8, 7).astimezone(TZ_AMS), datetime(2023, 8, 25).astimezone(TZ_AMS)),  # bouwvak
+        (datetime(2023, 12, 25).astimezone(TZ_AMS), datetime(2023, 12, 31).astimezone(TZ_AMS)),  # kerst
+    ]
+    for holiday_start, holiday_end in holidays:
+        if holiday_start <= datetime_obj <= holiday_end:
+            return False
+    return True
+
+
+def is_in_time_range(datetime_obj: datetime) -> bool:
+    # Define the time ranges in local time
+    time_ranges = {
+        0: (time(6, 0), time(22, 0)),  # ma
+        1: (time(6, 0), time(18, 0)),  # di
+        2: (time(6, 0), time(22, 0)),  # woe
+        3: (time(6, 0), time(14, 0)),  # do
+        4: (time(6, 0), time(16, 0)),  # vr
+    }
+    day = datetime_obj.weekday()
+    if day < 5:
+        return time_ranges[day][0] <= datetime_obj.time() <= time_ranges[day][1]
+    # it's not on a weekday anyway
+    return False
+
+
+def get_duration_from_timeline_object(timeline_object: dict) -> dict:
+    for _, dct in timeline_object.items():
+        if "duration" in dct:
+            return dct["duration"]
+    return {}
+
+
+def bin_is_in_date_day_time_range(bin: list) -> bool:
+    """
+    Check if the bin is within the date, day and time range.
+
+    Resolves to true if the journey segment in this bin is within the range. It is, if the start and/or end time of
+    that journey (which may consist of several timeline objects) is within the date, day and time range.
+
+    Date range: outside holidays
+    Day range: weekdays
+    Time range: weekday 'office hours'
+
+    :param bin: The bin to check.
+    :return: True if the bin is within the date/ day/ time range, False otherwise.
+    """
+    # the journey segment is the 2nd segment in the bin
+    segment = bin[1]
+    journey_start = get_duration_from_timeline_object(segment[0]).get("startTimestamp")
+    journey_end = get_duration_from_timeline_object(segment[-1]).get("endTimestamp")
+    return (is_in_date_range(journey_start) and is_in_time_range(journey_start)) or (
+        is_in_date_range(journey_end) and is_in_time_range(journey_end)
+    )
+
+
 def make_bins(current_obj, current_bin, gen, bins) -> List[list]:
+    """
+    Organizes segments into bins, ensuring each bin starts with the last segment of the previous bin.
+    This function processes segments and groups them into bins. The first bin is created manually
+    with the first place segment. Each subsequent bin starts with the last segment of the previous bin.
+    If the last bin is incomplete (contains fewer than 3 segments), it is removed before returning the bins.
+
+    Each bin is accepted only if it is within the date/time range.
+    TODO: make the date/time range configurable.
+
+    In the end, a bin is a journey: a start address (place / address segment), a journey (driving segment), and an end
+    address (place / address segment).
+
+    :param current_obj: The current object being processed.
+    :param current_bin: The current bin being filled with segments.
+    :param gen: A generator that yields segments.
+    :param bins: A list of bins, where each bin is a list of segments.
+    :return: A list of bins, where each bin is a list of segments.
+    """
     if not bins:
         logger.info("make_bins: manually create first bin with first place segment")
         # find the left segment of the first bin, which has to be a place-segment
         current_obj, segment, gen = find_first_place_segment(current_obj, gen)
         # the bin is a list of lists, the first item is the segment
         current_obj, gen, current_bin = make_bin(current_obj, gen, [segment])
-        bins.append(current_bin)
+        # only accept this bin if it is within the date/time range
+        if bin_is_in_date_day_time_range(current_bin):
+            bins.append(current_bin)
         logger.info("make_bins: start making bins")
 
     logger.debug(f"make_bins: current object: {current_obj}")
@@ -269,7 +341,9 @@ def make_bins(current_obj, current_bin, gen, bins) -> List[list]:
     while current_obj:
         # each new bin has the last segment of the previous bin as first segment
         current_obj, gen, current_bin = make_bin(current_obj, gen, [current_bin[-1]])
-        bins.append(current_bin)
+        # only accept this bin if it is within the date/time range
+        if bin_is_in_date_day_time_range(current_bin):
+            bins.append(current_bin)
 
     logger.info("make_bins: no more objects found, return bins w/o adding last incomplete bin")
     if len(bins[-1]) < 3:
@@ -318,7 +392,6 @@ def main(gen):
     start = datetime.now()
     try:
         first_obj = next(gen)
-        first_obj = clean_timeline_object(first_obj)
     except StopIteration:
         logger.error("No objects found, so no bins created")
         return []

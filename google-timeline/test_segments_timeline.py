@@ -1,16 +1,19 @@
-from unittest.mock import mock_open
+from datetime import datetime
+from unittest.mock import mock_open, patch
 from pathlib import Path
 
 import pytest
 from segments_timeline import (
+    TZ_AMS,
     find_first_place_segment,
     get_timeline_object_generator,
     filter_keys,
-    clean_timeline_object,
+    timeline_object_hook,
+    get_duration_from_timeline_object,
     is_place_visit,
     is_activity_segment,
     is_in_passenger_vehicle,
-    is_on_a_weekday,
+    bin_is_in_date_day_time_range,
     make_bin,
     make_bins,
     make_segment,
@@ -38,6 +41,7 @@ def test_filter_keys():
         ["key1", "key3"],
     ) == {"key1": "value1", "key3": "value3"}
 
+
 def test_clean_timeline_object_place_visit():
     item = {
         "placeVisit": {
@@ -52,7 +56,7 @@ def test_clean_timeline_object_place_visit():
             "duration": {"startTimestamp": "2023-01-01T12:00:00Z", "endTimestamp": "2023-01-01T12:30:00Z"},
         }
     }
-    assert clean_timeline_object(item) == expected
+    assert timeline_object_hook(item) == expected
 
 
 def test_clean_timeline_object_activity_segment():
@@ -75,13 +79,18 @@ def test_clean_timeline_object_activity_segment():
             "duration": {"startTimestamp": "2023-01-01T12:00:00Z", "endTimestamp": "2023-01-01T12:30:00Z"},
         }
     }
-    assert clean_timeline_object(item) == expected
+    assert timeline_object_hook(item) == expected
 
 
-def test_clean_timeline_object_no_place_visit_or_activity_segment():
-    item = {"otherKey": "should raise error"}
-    with pytest.raises(ValueError, match="No place visit or activity segment found in the timeline object."):
-        clean_timeline_object(item)
+def test_clean_duration():
+    item = {"duration": {"startTimestamp": "2023-01-01T12:00:00Z", "endTimestamp": "2023-01-01T12:30:00Z"}}
+    expected = {
+        "duration": {
+            "startTimestamp": datetime(2023, 1, 1, 13, 0, 0).astimezone(TZ_AMS),
+            "endTimestamp": datetime(2023, 1, 1, 13, 30, 0).astimezone(TZ_AMS),
+        }
+    }
+    assert timeline_object_hook(item) == expected
 
 
 def test_get_timeline_object_generator(mock_path_exists, mock_file_open):
@@ -114,39 +123,132 @@ def test_is_in_passenger_vehicle():
     assert not is_in_passenger_vehicle({"noActivityType": "IN_PASSENGER_VEHICLE"})
 
 
-def test_item_is_on_a_weekday():
-    # a random week in July 2024, starting on a Monday
-    for d in range(8, 13):
-        assert is_on_a_weekday(
-            {
+def test_bin_is_in_date_day_time_range():
+    journey = [  # journey starts and ends on a Monday outside holiday inside office hours
+        {
+            "placeVisit": {
                 "duration": {
-                    "startTimestamp": f"2024-07-{d:02}T12:00:00.000Z",
-                    "endTimestamp": f"2024-07-{d:02}T13:00:00.000Z",
+                    "startTimestamp": datetime(2023, 5, 15, 12, 0, 0, tzinfo=TZ_AMS),
+                    "endTimestamp": datetime(2023, 5, 15, 12, 30, 0, tzinfo=TZ_AMS),
                 }
             }
-        )
-
-
-def test_item_is_not_on_a_weekday():
-    for d in range(13, 15):
-        assert not is_on_a_weekday(
-            {
+        },
+        {
+            "activitySegment": {
+                "activityType": "WALKING",
                 "duration": {
-                    "startTimestamp": f"2024-07-{d:02}T12:00:00.000Z",
-                    "endTimestamp": f"2024-07-{d:02}T13:00:00.000Z",
+                    "startTimestamp": datetime(2023, 5, 15, 12, 30, 0, tzinfo=TZ_AMS),
+                    "endTimestamp": datetime(2023, 5, 15, 13, 0, 0, tzinfo=TZ_AMS),
+                },
+            }
+        },
+        {
+            "placeVisit": {
+                "duration": {
+                    "startTimestamp": datetime(2023, 5, 15, 13, 0, 0, tzinfo=TZ_AMS),
+                    "endTimestamp": datetime(2023, 5, 15, 13, 30, 0, tzinfo=TZ_AMS),
                 }
             }
-        )
+        },
+    ]
+    bin = ["first segment", journey, "third segment"]
+    assert bin_is_in_date_day_time_range(bin)
 
 
-def test_item_is_not_on_a_weekday_if_night_and_starts_or_ends_in_weekend():
-    # and a night time situation
-    assert not is_on_a_weekday(
-        {"duration": {"startTimestamp": "2024-07-07T23:00:00.000Z", "endTimestamp": "2024-07-08T01:00:00.000Z"}}
-    )
-    assert not is_on_a_weekday(
-        {"duration": {"startTimestamp": "2024-07-12T23:00:00.000Z", "endTimestamp": "2024-07-13T01:00:00.000Z"}}
-    )
+def test_bin_starts_in_range_ends_outside_range():
+    journey = [  # journey starts a Monday outside holiday inside office hours, but ends outside office hours
+        {
+            "placeVisit": {
+                "duration": {
+                    "startTimestamp": datetime(2023, 5, 15, 12, 0, 0, tzinfo=TZ_AMS),
+                    "endTimestamp": datetime(2023, 5, 15, 12, 30, 0, tzinfo=TZ_AMS),
+                }
+            }
+        },
+        {
+            "activitySegment": {
+                "activityType": "WALKING",
+                "duration": {
+                    "startTimestamp": datetime(2023, 5, 15, 12, 30, 0, tzinfo=TZ_AMS),
+                    "endTimestamp": datetime(2023, 5, 15, 13, 0, 0, tzinfo=TZ_AMS),
+                },
+            }
+        },
+        {
+            "placeVisit": {
+                "duration": {
+                    "startTimestamp": datetime(2023, 5, 15, 13, 0, 0, tzinfo=TZ_AMS),
+                    "endTimestamp": datetime(2023, 5, 15, 23, 30, 0, tzinfo=TZ_AMS),
+                }
+            }
+        },
+    ]
+    bin = ["first segment", journey, "third segment"]
+    assert bin_is_in_date_day_time_range(bin)
+
+
+def test_bin_starts_outside_range_ends_in_range():
+    journey = [
+        {
+            "placeVisit": {
+                "duration": {
+                    "startTimestamp": datetime(2023, 5, 13, 12, 0, 0, tzinfo=TZ_AMS),
+                    "endTimestamp": datetime(2023, 5, 15, 12, 30, 0, tzinfo=TZ_AMS),
+                }
+            }
+        },
+        {
+            "activitySegment": {
+                "activityType": "WALKING",
+                "duration": {
+                    "startTimestamp": datetime(2023, 5, 15, 12, 30, 0, tzinfo=TZ_AMS),
+                    "endTimestamp": datetime(2023, 5, 15, 13, 0, 0, tzinfo=TZ_AMS),
+                },
+            }
+        },
+        {
+            "placeVisit": {
+                "duration": {
+                    "startTimestamp": datetime(2023, 5, 15, 13, 0, 0, tzinfo=TZ_AMS),
+                    "endTimestamp": datetime(2023, 5, 15, 13, 30, 0, tzinfo=TZ_AMS),
+                }
+            }
+        },
+    ]
+    bin = ["first segment", journey, "third segment"]
+    assert bin_is_in_date_day_time_range(bin)
+
+
+def test_bin_is_not_in_date_day_time_range():
+    journey = [
+        {
+            "placeVisit": {
+                "duration": {
+                    "startTimestamp": datetime(2023, 5, 13, 12, 0, 0, tzinfo=TZ_AMS),
+                    "endTimestamp": datetime(2023, 5, 15, 12, 30, 0, tzinfo=TZ_AMS),
+                }
+            }
+        },
+        {
+            "activitySegment": {
+                "activityType": "WALKING",
+                "duration": {
+                    "startTimestamp": datetime(2023, 5, 15, 12, 30, 0, tzinfo=TZ_AMS),
+                    "endTimestamp": datetime(2023, 5, 15, 13, 0, 0, tzinfo=TZ_AMS),
+                },
+            }
+        },
+        {
+            "placeVisit": {
+                "duration": {
+                    "startTimestamp": datetime(2023, 5, 15, 13, 0, 0, tzinfo=TZ_AMS),
+                    "endTimestamp": datetime(2023, 5, 13, 13, 30, 0, tzinfo=TZ_AMS),
+                }
+            }
+        },
+    ]
+    bin = ["first segment", journey, "third segment"]
+    assert not bin_is_in_date_day_time_range(bin)
 
 
 def test_peek():
@@ -321,37 +423,211 @@ def test_make_bins():
         to
         for to in [
             # first objects excluded from any bin
-            {"activitySegment": {"activityType": "WALKING", "duration": 1}},
-            {"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 2}},
+            {
+                "activitySegment": {
+                    "activityType": "WALKING",
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 1, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 1, 12, 30, 0).astimezone(TZ_AMS),
+                    },
+                }
+            },
+            {
+                "activitySegment": {
+                    "activityType": "IN_PASSENGER_VEHICLE",
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 2, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 2, 12, 30, 0).astimezone(TZ_AMS),
+                    },
+                }
+            },
             # start p-segment, bin 1 ('home')
-            {"placeVisit": {"duration": 3}},
+            {
+                "placeVisit": {
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 5, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 5, 12, 30, 0).astimezone(TZ_AMS),
+                    }
+                }
+            },
             # start a-segment, bin 1 ('drive')
-            {"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 4}},
+            {
+                "activitySegment": {
+                    "activityType": "IN_PASSENGER_VEHICLE",
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 6, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 6, 12, 30, 0).astimezone(TZ_AMS),
+                    },
+                }
+            },
             # start p-segment, bin 1 & 2 ('customer 1')
-            {"placeVisit": {"duration": 5}},
-            {"activitySegment": {"activityType": "WALKING", "duration": 6}},
-            {"placeVisit": {"duration": 7}},
-            {"activitySegment": {"activityType": "WALKING", "duration": 8}},
-            {"placeVisit": {"duration": 9}},
-            {"activitySegment": {"activityType": "WALKING", "duration": 10}},
-            {"placeVisit": {"duration": 11}},
-            {"placeVisit": {"duration": 12}},
-            {"activitySegment": {"activityType": "WALKING", "duration": 13}},
+            {
+                "placeVisit": {
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 7, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 7, 12, 30, 0).astimezone(TZ_AMS),
+                    }
+                }
+            },
+            {
+                "activitySegment": {
+                    "activityType": "WALKING",
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 8, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 8, 12, 30, 0).astimezone(TZ_AMS),
+                    },
+                }
+            },
+            {
+                "placeVisit": {
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 9, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 9, 12, 30, 0).astimezone(TZ_AMS),
+                    }
+                }
+            },
+            {
+                "activitySegment": {
+                    "activityType": "WALKING",
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 12, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 12, 12, 30, 0).astimezone(TZ_AMS),
+                    },
+                }
+            },
+            {
+                "placeVisit": {
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 13, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 13, 12, 30, 0).astimezone(TZ_AMS),
+                    }
+                }
+            },
+            {
+                "activitySegment": {
+                    "activityType": "WALKING",
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 14, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 14, 12, 30, 0).astimezone(TZ_AMS),
+                    },
+                }
+            },
+            {
+                "placeVisit": {
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 15, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 15, 12, 30, 0).astimezone(TZ_AMS),
+                    }
+                }
+            },
+            {
+                "placeVisit": {
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 16, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 16, 12, 30, 0).astimezone(TZ_AMS),
+                    }
+                }
+            },
+            {
+                "activitySegment": {
+                    "activityType": "WALKING",
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 19, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 19, 12, 30, 0).astimezone(TZ_AMS),
+                    },
+                }
+            },
             # start a-segment, bin 2 ('drive')
-            {"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 14}},
-            {"activitySegment": {"activityType": "WALKING", "duration": 15}},
+            {
+                "activitySegment": {
+                    "activityType": "IN_PASSENGER_VEHICLE",
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 20, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 20, 12, 30, 0).astimezone(TZ_AMS),
+                    },
+                }
+            },
+            {
+                "activitySegment": {
+                    "activityType": "WALKING",
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 21, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 21, 12, 30, 0).astimezone(TZ_AMS),
+                    },
+                }
+            },
             # start p-segment, bin 2 & 3 ('home')
-            {"placeVisit": {"duration": 16}},
-            {"activitySegment": {"activityType": "WALKING", "duration": 17}},
-            {"placeVisit": {"duration": 18}},
+            {
+                "placeVisit": {
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 22, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 22, 12, 30, 0).astimezone(TZ_AMS),
+                    }
+                }
+            },
+            {
+                "activitySegment": {
+                    "activityType": "WALKING",
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 23, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 23, 12, 30, 0).astimezone(TZ_AMS),
+                    },
+                }
+            },
+            {
+                "placeVisit": {
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 26, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 26, 12, 30, 0).astimezone(TZ_AMS),
+                    }
+                }
+            },
             # start a-segment, bin 3 ('drive')
-            {"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 19}},
+            {
+                "activitySegment": {
+                    "activityType": "IN_PASSENGER_VEHICLE",
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 27, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 27, 12, 30, 0).astimezone(TZ_AMS),
+                    },
+                }
+            },
             # start p-segment, bin 3 (& 4 fwiw) ('customer 2')
-            {"placeVisit": {"duration": 20}},
-            {"activitySegment": {"activityType": "WALKING", "duration": 21}},
-            {"placeVisit": {"duration": 22}},
+            {
+                "placeVisit": {
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 28, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 28, 12, 30, 0).astimezone(TZ_AMS),
+                    }
+                }
+            },
+            {
+                "activitySegment": {
+                    "activityType": "WALKING",
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 29, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 29, 12, 30, 0).astimezone(TZ_AMS),
+                    },
+                }
+            },
+            {
+                "placeVisit": {
+                    "duration": {
+                        "startTimestamp": datetime(2023, 6, 30, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 6, 30, 12, 30, 0).astimezone(TZ_AMS),
+                    }
+                }
+            },
             # start a-segment, bin 4, incomplete bin
-            {"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 23}},
+            {
+                "activitySegment": {
+                    "activityType": "IN_PASSENGER_VEHICLE",
+                    "duration": {
+                        "startTimestamp": datetime(2023, 7, 3, 12, 0, 0).astimezone(TZ_AMS),
+                        "endTimestamp": datetime(2023, 7, 3, 12, 30, 0).astimezone(TZ_AMS),
+                    },
+                }
+            },
         ]
     )
 
@@ -359,61 +635,310 @@ def test_make_bins():
 
     # the first and last bins aren't included, bc they're both incomplete
     assert 3 == len(actual_bins)
-    assert {"placeVisit": {"duration": 3}} == actual_bins[0][0][0]
-    assert {"placeVisit": {"duration": 22}} == actual_bins[-1][-1][-1]
+    assert get_duration_from_timeline_object(actual_bins[0][0][0]).get("startTimestamp") == datetime(
+        2023, 6, 5, 12, 0, 0
+    ).astimezone(TZ_AMS)
+    assert get_duration_from_timeline_object(actual_bins[-1][-1][-1]).get("startTimestamp") == datetime(
+        2023, 6, 30, 12, 0, 0
+    ).astimezone(TZ_AMS)
     # generator should now be empty
     with pytest.raises(StopIteration):
         next(obj_gen)
     # but, yk, just to be sure
-    assert [
+    assert actual_bins == [
         [
-            [{"placeVisit": {"duration": 3}}],
-            [{"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 4}}],
             [
-                {"placeVisit": {"duration": 5}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 6}},
-                {"placeVisit": {"duration": 7}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 8}},
-                {"placeVisit": {"duration": 9}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 10}},
-                {"placeVisit": {"duration": 11}},
-                {"placeVisit": {"duration": 12}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 13}},
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 5, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 5, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                }
+            ],
+            [
+                {
+                    "activitySegment": {
+                        "activityType": "IN_PASSENGER_VEHICLE",
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 6, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 6, 12, 30, 0).astimezone(TZ_AMS),
+                        },
+                    }
+                }
+            ],
+            [
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 7, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 7, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
+                {
+                    "activitySegment": {
+                        "activityType": "WALKING",
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 8, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 8, 12, 30, 0).astimezone(TZ_AMS),
+                        },
+                    }
+                },
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 9, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 9, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
+                {
+                    "activitySegment": {
+                        "activityType": "WALKING",
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 12, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 12, 12, 30, 0).astimezone(TZ_AMS),
+                        },
+                    }
+                },
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 13, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 13, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
+                {
+                    "activitySegment": {
+                        "activityType": "WALKING",
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 14, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 14, 12, 30, 0).astimezone(TZ_AMS),
+                        },
+                    }
+                },
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 15, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 15, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 16, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 16, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
+                {
+                    "activitySegment": {
+                        "activityType": "WALKING",
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 19, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 19, 12, 30, 0).astimezone(TZ_AMS),
+                        },
+                    }
+                },
             ],
         ],
         [
             [
-                {"placeVisit": {"duration": 5}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 6}},
-                {"placeVisit": {"duration": 7}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 8}},
-                {"placeVisit": {"duration": 9}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 10}},
-                {"placeVisit": {"duration": 11}},
-                {"placeVisit": {"duration": 12}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 13}},
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 7, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 7, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
+                {
+                    "activitySegment": {
+                        "activityType": "WALKING",
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 8, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 8, 12, 30, 0).astimezone(TZ_AMS),
+                        },
+                    }
+                },
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 9, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 9, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
+                {
+                    "activitySegment": {
+                        "activityType": "WALKING",
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 12, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 12, 12, 30, 0).astimezone(TZ_AMS),
+                        },
+                    }
+                },
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 13, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 13, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
+                {
+                    "activitySegment": {
+                        "activityType": "WALKING",
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 14, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 14, 12, 30, 0).astimezone(TZ_AMS),
+                        },
+                    }
+                },
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 15, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 15, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 16, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 16, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
+                {
+                    "activitySegment": {
+                        "activityType": "WALKING",
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 19, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 19, 12, 30, 0).astimezone(TZ_AMS),
+                        },
+                    }
+                },
             ],
             [
-                {"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 14}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 15}},
+                {
+                    "activitySegment": {
+                        "activityType": "IN_PASSENGER_VEHICLE",
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 20, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 20, 12, 30, 0).astimezone(TZ_AMS),
+                        },
+                    }
+                },
+                {
+                    "activitySegment": {
+                        "activityType": "WALKING",
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 21, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 21, 12, 30, 0).astimezone(TZ_AMS),
+                        },
+                    }
+                },
             ],
             [
-                {"placeVisit": {"duration": 16}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 17}},
-                {"placeVisit": {"duration": 18}},
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 22, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 22, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
+                {
+                    "activitySegment": {
+                        "activityType": "WALKING",
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 23, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 23, 12, 30, 0).astimezone(TZ_AMS),
+                        },
+                    }
+                },
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 26, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 26, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
             ],
         ],
         [
             [
-                {"placeVisit": {"duration": 16}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 17}},
-                {"placeVisit": {"duration": 18}},
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 22, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 22, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
+                {
+                    "activitySegment": {
+                        "activityType": "WALKING",
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 23, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 23, 12, 30, 0).astimezone(TZ_AMS),
+                        },
+                    }
+                },
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 26, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 26, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
             ],
-            [{"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": 19}}],
             [
-                {"placeVisit": {"duration": 20}},
-                {"activitySegment": {"activityType": "WALKING", "duration": 21}},
-                {"placeVisit": {"duration": 22}},
+                {
+                    "activitySegment": {
+                        "activityType": "IN_PASSENGER_VEHICLE",
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 27, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 27, 12, 30, 0).astimezone(TZ_AMS),
+                        },
+                    }
+                }
+            ],
+            [
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 28, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 28, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
+                {
+                    "activitySegment": {
+                        "activityType": "WALKING",
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 29, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 29, 12, 30, 0).astimezone(TZ_AMS),
+                        },
+                    }
+                },
+                {
+                    "placeVisit": {
+                        "duration": {
+                            "startTimestamp": datetime(2023, 6, 30, 12, 0, 0).astimezone(TZ_AMS),
+                            "endTimestamp": datetime(2023, 6, 30, 12, 30, 0).astimezone(TZ_AMS),
+                        }
+                    }
+                },
             ],
         ],
-    ] == actual_bins
+    ]
