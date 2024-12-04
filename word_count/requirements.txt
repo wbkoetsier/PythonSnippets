@@ -1,2 +1,2 @@
-aiohttp==3.8.5
+aiohttp==3.9.2
 mwparserfromhell==0.5.2
